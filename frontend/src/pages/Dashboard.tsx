@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { 
   Plus, Search, Sun, Moon, LogOut, 
   Trash2, Database, UploadCloud, DownloadCloud, X, Lock
@@ -10,12 +8,12 @@ import api from '../lib/api';
 import type { Note } from '../types';
 import { useTheme } from '../lib/ThemeContext';
 import FileAttachments from '../components/FileAttachments';
+import BlockEditor from '../components/editor/BlockEditor';
 
 export default function Dashboard() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
-  const [isEditing, setIsEditing] = useState(true);
   const { theme, toggleTheme } = useTheme();
   
   const [search, setSearch] = useState('');
@@ -59,13 +57,16 @@ export default function Dashboard() {
 
   const handleCreateNote = async () => {
     try {
+      const initialContent = JSON.stringify({
+        type: 'doc',
+        content: [{ type: 'paragraph' }],
+      });
       const { data } = await api.post('/notes', {
         title: 'Untitled Note',
-        content: '# New Note\n\nWrite something...'
+        content: initialContent,
       });
-      setNotes([data, ...notes]);
+      await fetchNotes();
       setActiveNoteId(data.id);
-      setIsEditing(true);
     } catch (e) {
       console.error(e);
     }
@@ -77,22 +78,39 @@ export default function Dashboard() {
     try {
       await api.delete(`/notes/${id}`);
       setNotes(notes.filter(n => n.id !== id));
-      if (activeNoteId === id) setActiveNoteId(null);
+      if (activeNoteId === id) {
+        setActiveNoteId(null);
+        setActiveNote(null);
+      }
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleUpdateActiveNote = async (updates: Partial<Note>) => {
+  const handleTitleChange = async (title: string) => {
     if (!activeNote) return;
-    const updated = { ...activeNote, ...updates };
-    setActiveNote(updated); 
+    setActiveNote({ ...activeNote, title });
     try {
       await api.put(`/notes/${activeNote.id}`, {
-        title: updated.title,
-        content: updated.content
+        title,
+        content: activeNote.content,
       });
-      fetchNotes(); 
+      fetchNotes();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleContentUpdate = async (json: any) => {
+    if (!activeNote) return;
+    const contentStr = JSON.stringify(json);
+    setActiveNote(prev => prev ? { ...prev, content: contentStr } : null);
+    try {
+      await api.put(`/notes/${activeNote.id}`, {
+        title: activeNote.title,
+        content: contentStr,
+      });
+      fetchNotes();
     } catch (e) {
       console.error(e);
     }
@@ -157,7 +175,22 @@ export default function Dashboard() {
     window.location.href = '/auth';
   };
 
-  const filteredNotes = notes.filter(n => n.title.toLowerCase().includes(search.toLowerCase()) || n.preview?.toLowerCase().includes(search.toLowerCase()));
+  const filteredNotes = notes.filter(n =>
+    n.title.toLowerCase().includes(search.toLowerCase()) ||
+    n.preview?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Parse content for the editor
+  const editorContent = activeNote?.content
+    ? (() => {
+        try {
+          const parsed = JSON.parse(activeNote.content as string);
+          return parsed;
+        } catch {
+          return activeNote.content; // raw markdown fallback
+        }
+      })()
+    : null;
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
@@ -283,41 +316,22 @@ export default function Dashboard() {
       <div className="flex-1 flex flex-col w-full relative">
         {activeNote ? (
           <>
-            <div className="h-16 border-b border-border flex items-center justify-between px-8 bg-card flex-shrink-0">
-               <div className="flex-1 flex items-center">
-                 <input 
-                   value={activeNote.title}
-                   onChange={e => handleUpdateActiveNote({ title: e.target.value })}
-                   className="text-2xl font-bold bg-transparent border-none outline-none focus:ring-0 w-full placeholder:text-slate-300"
-                   placeholder="Note Title"
-                 />
-               </div>
-               <div className="flex items-center space-x-2 bg-background p-1 rounded-xl border border-border ml-4">
-                 <button onClick={() => setIsEditing(true)} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${isEditing ? 'bg-card shadow text-primary' : 'text-slate-500 hover:text-foreground'}`}>
-                   Edit
-                 </button>
-                 <button onClick={() => setIsEditing(false)} className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${!isEditing ? 'bg-card shadow text-primary' : 'text-slate-500 hover:text-foreground'}`}>
-                   Preview
-                 </button>
-               </div>
+            <div className="h-16 border-b border-border flex items-center px-8 bg-card flex-shrink-0">
+               <input 
+                 value={activeNote.title}
+                 onChange={e => handleTitleChange(e.target.value)}
+                 className="text-2xl font-bold bg-transparent border-none outline-none focus:ring-0 w-full placeholder:text-slate-300"
+                 placeholder="Note Title"
+               />
             </div>
             
             <div className="flex-1 overflow-y-auto p-8 relative">
               <div className="max-w-4xl mx-auto w-full">
-                {isEditing ? (
-                  <textarea 
-                    value={activeNote.content || ''}
-                    onChange={e => handleUpdateActiveNote({ content: e.target.value })}
-                    className="w-full h-full min-h-[50vh] bg-transparent border-none outline-none resize-none font-mono text-[15px] leading-relaxed dark:text-slate-300"
-                    placeholder="Write your note here using Markdown..."
-                  />
-                ) : (
-                  <div className="prose prose-slate dark:prose-invert max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                       {activeNote.content || '*Empty note*'}
-                    </ReactMarkdown>
-                  </div>
-                )}
+                <BlockEditor
+                  key={activeNote.id}
+                  content={editorContent}
+                  onUpdate={handleContentUpdate}
+                />
                 
                 <FileAttachments 
                    noteId={activeNote.id} 

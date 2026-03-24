@@ -39,3 +39,91 @@ body {
 ::-webkit-scrollbar-thumb {
   @apply bg-border rounded-full hover:bg-slate-500 transition-colors;
 }
+
+/* ===== Tiptap Block Editor Styles ===== */
+
+.tiptap {
+  outline: none;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  @apply text-slate-400 dark:text-slate-600;
+}
+
+.tiptap h1.is-empty::before,
+.tiptap h2.is-empty::before,
+.tiptap h3.is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  @apply text-slate-400 dark:text-slate-600;
+}
+
+/* Paragraph */
+.tiptap p {
+  @apply my-1 leading-relaxed;
+}
+
+/* Headings */
+.tiptap h1 {
+  @apply text-3xl font-bold mt-8 mb-3 tracking-tight;
+}
+.tiptap h2 {
+  @apply text-2xl font-bold mt-6 mb-2 tracking-tight;
+}
+.tiptap h3 {
+  @apply text-xl font-semibold mt-4 mb-2;
+}
+
+/* Lists */
+.tiptap ul {
+  @apply list-disc pl-6 my-2;
+}
+.tiptap ol {
+  @apply list-decimal pl-6 my-2;
+}
+.tiptap li {
+  @apply my-0.5;
+}
+.tiptap li p {
+  @apply my-0;
+}
+
+/* Code block */
+.tiptap pre {
+  @apply bg-slate-900 dark:bg-slate-950 text-slate-100 rounded-xl p-4 my-4 overflow-x-auto text-sm font-mono;
+}
+.tiptap pre code {
+  @apply bg-transparent p-0 text-inherit rounded-none;
+}
+
+/* Inline code */
+.tiptap code {
+  @apply bg-slate-100 dark:bg-slate-800 text-pink-600 dark:text-pink-400 px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+/* Blockquote */
+.tiptap blockquote {
+  @apply border-l-4 border-primary pl-4 my-4 italic text-slate-600 dark:text-slate-400;
+}
+
+/* Bold, Italic, Strikethrough */
+.tiptap strong {
+  @apply font-bold;
+}
+.tiptap em {
+  @apply italic;
+}
+.tiptap s {
+  @apply line-through;
+}
+
+/* Focus Animation */
+.tiptap > *:first-child {
+  @apply mt-0;
+}
