@@ -1,294 +1,167 @@
-# 📘 Personal Knowledge Base — Version 1 Spec
+# 🧠 VAULTOR — Version 1 (Delivered)
 
-## 🎯 Goal
+## 🎯 Overview
 
-Build a **local-first, Dockerized personal knowledge base** that allows users to:
+Vaultor v1 is a **local-first, Dockerized personal knowledge vault** that enables users to:
 
-* Create and manage notes
-* Upload and attach files
-* Export and import their entire workspace
-* Secure access using a master password (no recovery in v1)
-
----
-
-# 🚀 Core Principles
-
-* Local-first (no cloud, no accounts)
-* Simple over feature-rich
-* Fully portable (export/import)
-* Honest security (no fake recovery)
+* Write notes using a **Notion-style block editor**
+* Store and manage files locally
+* Export and import their entire workspace securely
+* Maintain full ownership of their data without relying on any cloud service
 
 ---
 
-# 📦 Features (v1 Scope)
+# ✅ Delivered Features
 
-## 📝 Notes
+## 📝 Block-Based Note Editor
 
-* Create, edit, delete notes
-* Markdown content support
-* List all notes in sidebar
-* View single note
+### Core
+
+* Create, update, delete notes
+* Notes consist of:
+
+  * Title
+  * Block-based content (JSON)
+
+### Editor Experience
+
+* Single unified editing interface (no preview mode)
+* Real-time rendering (WYSIWYG-like)
+* Smooth typing and navigation between blocks
+
+### Supported Blocks
+
+* Paragraph
+* Heading (H1, H2, H3)
+* Bullet list
+* Numbered list
+* Code block
+* Quote
+
+---
+
+## ⚡ Editor Intelligence
+
+### Slash Command Menu (`/`)
+
+* Opens command menu
+* Supports filtering via typing
+* Keyboard navigation (↑ ↓ Enter)
+* Inserts selected block type
+
+---
+
+### Markdown Shortcuts (Typing)
+
+Auto-conversion during typing:
+
+* `# ` → Heading 1
+* `## ` → Heading 2
+* `- ` or `* ` → Bullet list
+* `1. ` → Numbered list
+* `> ` → Quote
+* ```→ Code block
+  ```
+
+---
+
+### Markdown Paste Handling
+
+* Detects pasted markdown
+* Converts into structured block format
+* Replaces current content seamlessly
+
+---
 
 ## 📎 File Management
 
 * Upload files (PDF, CSV, XLSX, etc.)
-* Store files on disk
-* Attach/detach files to/from notes
+* Files stored on disk (`/data/files`)
+* Attach files to notes
+* Detach files from notes
 * Download files
 
-## 📤 Export
+---
 
-* Export entire workspace as ZIP
-* Includes:
+## 📤 Encrypted Export
 
-  * SQLite database file
-  * All uploaded files
+* Full workspace export supported
+* Requires master password
+* Output is an **encrypted binary file**
 
-## 📥 Import
+### Includes:
 
-* Import ZIP to restore workspace
-* Overwrites existing data
+* SQLite database (`app.db`)
+* All uploaded files
+
+---
+
+## 📥 Encrypted Import
+
+* Import encrypted export file
+* Requires master password
+* Replaces existing workspace completely
+
+---
 
 ## 🔐 Security (Master Password)
 
-* Set master password on first run
-* Required to:
+* Master password set during initial setup
+* Required for:
 
-  * Unlock app
-  * Perform export/import
-* No recovery mechanism (v1)
-* If password is lost → data is unrecoverable
+  * Unlocking application
+  * Export operations
+  * Import operations
 
-## 🐳 Dockerized Setup
+### Security Properties
 
-* App runs via Docker
-* Persistent volume for:
-
-  * Database
-  * Files
+* Password stored as secure hash
+* Encryption uses derived key (PBKDF2/Argon2 + AES-GCM)
+* No recovery mechanism in v1
+* Incorrect password results in hard failure
 
 ---
 
-# 🧱 Database Schema (SQLite)
+## 🐳 Dockerized Deployment
 
-## `notes`
-
-```sql
-CREATE TABLE notes (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    created_at DATETIME NOT NULL,
-    updated_at DATETIME NOT NULL
-);
-```
+* Fully containerized application
+* Single backend container
+* SQLite database stored in mounted volume
 
 ---
 
-## `files`
+## 🧱 Data Model (Implemented)
 
-```sql
-CREATE TABLE files (
-    id TEXT PRIMARY KEY,
-    original_name TEXT NOT NULL,
-    stored_name TEXT NOT NULL,
-    mime_type TEXT,
-    size INTEGER,
-    created_at DATETIME NOT NULL
-);
-```
+### Notes
+
+* Stored as:
+
+  * `id`
+  * `title`
+  * `content` (JSON block structure)
+  * timestamps
 
 ---
 
-## `note_files`
+### Files
 
-```sql
-CREATE TABLE note_files (
-    note_id TEXT NOT NULL,
-    file_id TEXT NOT NULL,
-    PRIMARY KEY (note_id, file_id),
-    FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
-);
-```
+* Metadata stored in database
+* Binary stored on disk
 
 ---
 
-# 🌐 API Contract
+### Relationships
 
-Base URL:
+* Many-to-many:
 
-```
-/api
-```
+  * Notes ↔ Files
 
 ---
 
-## 📝 Notes API
+## 📁 Storage Layout
 
-### Create Note
-
-```
-POST /api/notes
-```
-
-Request:
-
-```json
-{
-  "title": "My Note",
-  "content": "Hello world"
-}
-```
-
----
-
-### Get All Notes
-
-```
-GET /api/notes
-```
-
-Response:
-
-```json
-[
-  {
-    "id": "uuid",
-    "title": "My Note",
-    "preview": "Hello world...",
-    "updatedAt": "..."
-  }
-]
-```
-
----
-
-### Get Note by ID
-
-```
-GET /api/notes/{id}
-```
-
-Response:
-
-```json
-{
-  "id": "uuid",
-  "title": "My Note",
-  "content": "Full markdown...",
-  "files": [
-    {
-      "id": "file-id",
-      "name": "resume.pdf"
-    }
-  ],
-  "createdAt": "...",
-  "updatedAt": "..."
-}
-```
-
----
-
-### Update Note
-
-```
-PUT /api/notes/{id}
-```
-
-Request:
-
-```json
-{
-  "title": "Updated title",
-  "content": "Updated content"
-}
-```
-
----
-
-### Delete Note
-
-```
-DELETE /api/notes/{id}
-```
-
----
-
-## 📎 File API
-
-### Upload File
-
-```
-POST /api/files
-Content-Type: multipart/form-data
-```
-
-Form:
-
-```
-file: <binary>
-```
-
-Response:
-
-```json
-{
-  "id": "file-id",
-  "name": "resume.pdf"
-}
-```
-
----
-
-### Attach File to Note
-
-```
-POST /api/notes/{noteId}/files/{fileId}
-```
-
----
-
-### Remove File from Note
-
-```
-DELETE /api/notes/{noteId}/files/{fileId}
-```
-
----
-
-### Download File
-
-```
-GET /api/files/{id}/download
-```
-
----
-
-### Delete File
-
-```
-DELETE /api/files/{id}
-```
-
----
-
-## 📦 Export / Import
-
-### Export Workspace
-
-```
-GET /api/export
-```
-
-Response:
-
-* ZIP file
-
-Structure:
-
-```
-knowledge-base.zip
+```id="lz2p9z"
+/data
 ├── app.db
 ├── files/
 │   ├── <stored files>
@@ -296,106 +169,77 @@ knowledge-base.zip
 
 ---
 
-### Import Workspace
+## 🌐 API Surface (Implemented)
 
-```
-POST /api/import
-Content-Type: multipart/form-data
-```
+### Notes
 
-Form:
-
-```
-file: <zip>
-```
-
-Behavior:
-
-* Replaces existing database and files
+* Create note
+* Fetch all notes (lightweight)
+* Fetch single note (full content)
+* Update note
+* Delete note
 
 ---
 
-# 🔐 Security Design
+### Files
 
-## Master Password
-
-* Set during first-time setup
-* Stored as:
-
-  * Hashed (PBKDF2 / Argon2 / bcrypt)
-* Used for:
-
-  * App unlock
-  * Export/import authorization
-
-## Rules
-
-* Password is never stored in plain text
-* No password recovery in v1
-* Incorrect password → access denied
+* Upload file
+* Download file
+* Delete file
 
 ---
 
-# 📁 File Storage
+### Note ↔ File
 
-* Files stored on disk:
-
-```
-/data/files/
-```
-
-* Database stored at:
-
-```
-/data/app.db
-```
+* Attach file to note
+* Remove file from note
 
 ---
 
-# 🐳 Docker Setup (Conceptual)
+### Export / Import
 
-* Single container (backend + SQLite)
-* Volume mount:
-
-```
-/data
-```
+* Export workspace (encrypted)
+* Import workspace (encrypted)
 
 ---
 
-# 🧭 Out of Scope (v1)
+# ⚠️ Known Limitations (v1)
 
-* Search
-* Tags / folders
-* Real-time sync
-* Multi-user support
-* Cloud backup
-* Passkey recovery (planned v2)
-
----
-
-# 🏁 Definition of Done
-
-* User can:
-
-  * Create and edit notes
-  * Upload and attach files
-  * Export workspace
-  * Import workspace
-  * Unlock app using master password
-
-* App runs via Docker with persistent data
+* No search functionality
+* No tags or folder hierarchy
+* No multi-device sync
+* No collaboration
+* No password recovery
+* No encryption at rest (only export-level encryption)
 
 ---
 
-# 🔮 Future (v2 Ideas)
+# 🏁 Status
+
+Vaultor v1 is:
+
+* Fully functional
+* Locally deployable via Docker
+* Secure for personal use
+* Feature-complete as per initial scope
+
+---
+
+# 🔮 Next Direction (v2 Candidates)
 
 * Passkey-based recovery (WebAuthn)
 * Full-text search
-* Tagging system
-* UI improvements
+* Tagging / organization system
+* Block drag-and-drop
+* Inline formatting (bold, italic)
 * Encryption at rest
 
 ---
 
-**End of v1 Spec**
+# 🧠 Final Philosophy
+
+> “Vaultor gives you a private, portable, and powerful space to think—without friction, without lock-in.”
+
+---
+
+**Vaultor v1 — Completed**

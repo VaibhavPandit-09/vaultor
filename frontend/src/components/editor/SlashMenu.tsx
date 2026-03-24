@@ -5,8 +5,9 @@ import {
   Type, Heading1, Heading2, Heading3,
   List, ListOrdered, Code, Quote, FileUp,
   Minus, Table, FileSpreadsheet, CheckSquare,
-  Highlighter
+  Highlighter, Link2
 } from 'lucide-react';
+import { resourceLinkPluginKey } from './ResourceLinkExtension';
 
 interface SlashMenuItem {
   title: string;
@@ -141,6 +142,24 @@ const getItems = (onUploadMd: () => void, onUploadCsv: () => void): SlashMenuIte
     category: 'Advanced',
     action: (editor, range) => {
       editor.chain().focus().deleteRange(range).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    },
+  },
+  // --- Link ---
+  {
+    title: 'Link Resource',
+    command: 'link resource file note',
+    description: 'Insert an inline link',
+    icon: <Link2 size={18} />,
+    category: 'Insert',
+    action: (editor, range) => {
+      // Deletes the `/link` text, inserts `[[`, and activates the plugin.
+      editor.chain().focus().deleteRange(range).insertContent('[[').run();
+      const { from } = editor.state.selection;
+      setTimeout(() => {
+         const tr = editor.state.tr;
+         tr.setMeta(resourceLinkPluginKey, { active: true, query: '', range: { from: from - 2, to: from }, selectedIndex: 0 });
+         editor.view.dispatch(tr);
+      }, 50);
     },
   },
   // --- Upload ---

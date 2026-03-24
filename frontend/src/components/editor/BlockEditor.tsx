@@ -14,7 +14,10 @@ import Underline from '@tiptap/extension-underline';
 import { all, createLowlight } from 'lowlight';
 import { SlashCommandExtension, slashCommandPluginKey } from './SlashCommandExtension';
 import type { SlashCommandState } from './SlashCommandExtension';
+import { ResourceLinkExtension, resourceLinkPluginKey } from './ResourceLinkExtension';
+import type { ResourceLinkState } from './ResourceLinkExtension';
 import SlashMenu, { getItems } from './SlashMenu';
+import ResourceLinkMenu from './ResourceLinkMenu';
 import CodeBlockView from './CodeBlockView';
 import TableToolbar from './TableToolbar';
 import { markdownToHtml } from './markdownUtils';
@@ -32,6 +35,12 @@ export default function BlockEditor({ content, onUpdate, onRequestMdUpload, onRe
   const [slashState, setSlashState] = useState<SlashCommandState | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const [resourceState, setResourceState] = useState<ResourceLinkState | null>(null);
+  const [resourceMenuPos, setResourceMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [resourceSelectedIndex, setResourceSelectedIndex] = useState(0);
+  const [resourceFilteredCount, setResourceFilteredCount] = useState(0);
+
   const [isInTable, setIsInTable] = useState(false);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,6 +71,7 @@ export default function BlockEditor({ content, onUpdate, onRequestMdUpload, onRe
       TaskItem.configure({ nested: true }),
       Underline,
       SlashCommandExtension,
+      ResourceLinkExtension,
     ],
     content: parseInitialContent(content),
     editorProps: {
@@ -96,6 +106,34 @@ export default function BlockEditor({ content, onUpdate, onRequestMdUpload, onRe
       (window as any).__vaultor_editor = editor;
     }
     return () => { (window as any).__vaultor_editor = null; };
+  }, [editor]);
+
+  // Handle explicit resource link navigation
+  useEffect(() => {
+    (window as any).__navigateResourceLink = (dir: 'up' | 'down') => {
+      setResourceSelectedIndex(prev => {
+        if (resourceFilteredCount === 0) return 0;
+        if (dir === 'down') return (prev + 1) % resourceFilteredCount;
+        return (prev - 1 + resourceFilteredCount) % resourceFilteredCount;
+      });
+    };
+  }, [resourceFilteredCount]);
+
+  useEffect(() => {
+    if (resourceState?.query !== undefined) {
+      setResourceSelectedIndex(0);
+    }
+  }, [resourceState?.query]);
+
+  const closeResourceMenu = useCallback(() => {
+    if (editor) {
+      const tr = editor.state.tr;
+      tr.setMeta(resourceLinkPluginKey, { active: false, query: '', range: null, selectedIndex: 0 });
+      editor.view.dispatch(tr);
+    }
+    setResourceState(null);
+    setResourceMenuPos(null);
+    setResourceSelectedIndex(0);
   }, [editor]);
 
   const closeSlash = useCallback(() => {
@@ -171,11 +209,31 @@ export default function BlockEditor({ content, onUpdate, onRequestMdUpload, onRe
           setSelectedIndex(0);
         }
       }
+
+      // Handle Resource Link Plugin State Synchronously
+      const rlState = resourceLinkPluginKey.getState(editor.state) as ResourceLinkState | undefined;
+      if (rlState?.active) {
+        setResourceState(rlState);
+
+        const { from } = editor.state.selection;
+        const coords = editor.view.coordsAtPos(from);
+        const containerRect = editorContainerRef.current?.getBoundingClientRect();
+        if (containerRect) {
+          setResourceMenuPos({
+            top: coords.bottom - containerRect.top + 8,
+            left: Math.min(coords.left - containerRect.left, containerRect.width - 300),
+          });
+        }
+      } else if (resourceState?.active) {
+        setResourceState(null);
+        setResourceMenuPos(null);
+        setResourceSelectedIndex(0);
+      }
     };
 
     editor.on('transaction', handleTransaction);
     return () => { editor.off('transaction', handleTransaction); };
-  }, [editor, slashState, selectedIndex]);
+  }, [editor, slashState, selectedIndex, resourceState]);
 
   useEffect(() => {
     if (slashState?.query !== undefined) {
@@ -218,6 +276,19 @@ export default function BlockEditor({ content, onUpdate, onRequestMdUpload, onRe
             onClose={closeSlash}
             onUploadMd={onRequestMdUpload}
             onUploadCsv={onRequestCsvUpload}
+          />
+        </div>
+      )}
+
+      {resourceState?.active && resourceMenuPos && resourceState.range && (
+        <div className="absolute z-50" style={{ top: resourceMenuPos.top, left: resourceMenuPos.left }}>
+          <ResourceLinkMenu
+            editor={editor}
+            range={resourceState.range}
+            query={resourceState.query}
+            selectedIndex={resourceSelectedIndex}
+            onClose={closeResourceMenu}
+            onUpdateFiltered={setResourceFilteredCount}
           />
         </div>
       )}
