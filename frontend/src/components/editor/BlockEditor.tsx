@@ -6,21 +6,23 @@ import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
 import { SlashCommandExtension, slashCommandPluginKey } from './SlashCommandExtension';
 import type { SlashCommandState } from './SlashCommandExtension';
-import SlashMenu from './SlashMenu';
-import { markdownToTiptap } from './markdownUtils';
+import SlashMenu, { getItems } from './SlashMenu';
+import { markdownToHtml } from './markdownUtils';
 
 const lowlight = createLowlight(common);
 
 interface BlockEditorProps {
-  content: any; // JSON or string
+  content: any;
   onUpdate: (json: any) => void;
 }
 
 export default function BlockEditor({ content, onUpdate }: BlockEditorProps) {
   const [slashState, setSlashState] = useState<SlashCommandState | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mdInputRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -42,43 +44,66 @@ export default function BlockEditor({ content, onUpdate }: BlockEditorProps) {
     content: parseInitialContent(content),
     editorProps: {
       attributes: {
-        class: 'outline-none min-h-[50vh] prose prose-slate dark:prose-invert max-w-none prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl prose-p:leading-relaxed prose-code:bg-slate-100 dark:prose-code:bg-slate-800 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-pre:bg-slate-900 dark:prose-pre:bg-slate-950 prose-pre:text-slate-100 prose-blockquote:border-l-primary prose-blockquote:border-l-4 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-slate-600 dark:prose-blockquote:text-slate-400',
+        class: 'tiptap outline-none min-h-[50vh]',
       },
       handlePaste: (view, event) => {
         const text = event.clipboardData?.getData('text/plain');
         if (text && looksLikeMarkdown(text)) {
           event.preventDefault();
-          const tiptapDoc = markdownToTiptap(text);
-          if (tiptapDoc.content) {
-            const { state } = view;
-            const { from, to } = state.selection;
-            const nodes = tiptapDoc.content.map(node =>
-              state.schema.nodeFromJSON(node)
-            );
-            let tr = state.tr.deleteRange(from, to);
-            nodes.reverse().forEach(node => {
-              tr = tr.replaceSelectionWith(node);
-            });
-            view.dispatch(tr);
-          }
+          const html = markdownToHtml(text);
+          view.pasteHTML(html);
           return true;
         }
         return false;
       },
     },
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor: ed }) => {
       if (updateTimeoutRef.current) clearTimeout(updateTimeoutRef.current);
       updateTimeoutRef.current = setTimeout(() => {
-        onUpdate(editor.getJSON());
+        onUpdate(ed.getJSON());
       }, 300);
     },
-    onTransaction: ({ editor: ed }) => {
-      const state = slashCommandPluginKey.getState(ed.state) as SlashCommandState | undefined;
-      if (state?.active) {
+  });
+
+  // React to ProseMirror state changes for slash menu
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleTransaction = () => {
+      const state = slashCommandPluginKey.getState(editor.state) as SlashCommandState | undefined;
+      if (!state) return;
+
+      if (state.active) {
+        // Get filtered list to compute index bounds
+        const items = getItems(() => {});
+        const filtered = items.filter(item =>
+          item.title.toLowerCase().includes(state.query.toLowerCase()) ||
+          item.command.toLowerCase().includes(state.query.toLowerCase())
+        );
+
+        // Handle navigation signals from the plugin
+        if (state.navigateDirection === 'down') {
+          setSelectedIndex(prev => (prev + 1) % Math.max(filtered.length, 1));
+        } else if (state.navigateDirection === 'up') {
+          setSelectedIndex(prev => (prev - 1 + filtered.length) % Math.max(filtered.length, 1));
+        }
+
+        // Handle selection execution
+        if (state.executeSelection) {
+          // We need to execute from the current selectedIndex
+          const item = filtered[selectedIndex >= filtered.length ? 0 : selectedIndex];
+          if (item && state.range) {
+            item.action(editor, state.range);
+            closeSlash();
+            return;
+          }
+        }
+
         setSlashState(state);
-        // Position menu near cursor
-        const { from } = ed.state.selection;
-        const coords = ed.view.coordsAtPos(from);
+
+        // Position the menu
+        const { from } = editor.state.selection;
+        const coords = editor.view.coordsAtPos(from);
         const containerRect = editorContainerRef.current?.getBoundingClientRect();
         if (containerRect) {
           setMenuPos({
@@ -87,11 +112,24 @@ export default function BlockEditor({ content, onUpdate }: BlockEditorProps) {
           });
         }
       } else {
-        setSlashState(null);
-        setMenuPos(null);
+        if (slashState?.active) {
+          setSlashState(null);
+          setMenuPos(null);
+          setSelectedIndex(0);
+        }
       }
-    },
-  });
+    };
+
+    editor.on('transaction', handleTransaction);
+    return () => { editor.off('transaction', handleTransaction); };
+  }, [editor, slashState, selectedIndex]);
+
+  // Reset selected index when query changes
+  useEffect(() => {
+    if (slashState?.query !== undefined) {
+      setSelectedIndex(0);
+    }
+  }, [slashState?.query]);
 
   // Sync content when note changes externally
   useEffect(() => {
@@ -112,18 +150,59 @@ export default function BlockEditor({ content, onUpdate }: BlockEditorProps) {
         active: false,
         query: '',
         range: null,
+        selectedIndex: 0,
+        filteredCount: 0,
+        executeSelection: false,
+        navigateDirection: null,
       });
       editor.view.dispatch(tr);
     }
     setSlashState(null);
     setMenuPos(null);
+    setSelectedIndex(0);
   }, [editor]);
+
+  const handleUploadMd = useCallback(() => {
+    mdInputRef.current?.click();
+  }, []);
+
+  const handleMdFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0] || !editor) return;
+    const file = e.target.files[0];
+    const text = await file.text();
+    const html = markdownToHtml(text);
+    editor.chain().focus().insertContent(html).run();
+    if (mdInputRef.current) mdInputRef.current.value = '';
+  }, [editor]);
+
+  const handleSlashSelect = useCallback((index: number) => {
+    if (!slashState?.range || !editor) return;
+    const items = getItems(handleUploadMd);
+    const filtered = items.filter(item =>
+      item.title.toLowerCase().includes((slashState.query || '').toLowerCase()) ||
+      item.command.toLowerCase().includes((slashState.query || '').toLowerCase())
+    );
+    const item = filtered[index];
+    if (item) {
+      item.action(editor, slashState.range);
+      closeSlash();
+    }
+  }, [editor, slashState, closeSlash, handleUploadMd]);
 
   if (!editor) return null;
 
   return (
     <div ref={editorContainerRef} className="relative w-full">
       <EditorContent editor={editor} />
+
+      {/* Hidden input for .md file upload */}
+      <input
+        type="file"
+        ref={mdInputRef}
+        className="hidden"
+        accept=".md,.markdown,.txt"
+        onChange={handleMdFileSelected}
+      />
 
       {slashState?.active && menuPos && slashState.range && (
         <div
@@ -134,7 +213,10 @@ export default function BlockEditor({ content, onUpdate }: BlockEditorProps) {
             editor={editor}
             range={slashState.range}
             query={slashState.query}
+            selectedIndex={selectedIndex}
+            onSelectItem={handleSlashSelect}
             onClose={closeSlash}
+            onUploadMd={handleUploadMd}
           />
         </div>
       )}
@@ -145,21 +227,22 @@ export default function BlockEditor({ content, onUpdate }: BlockEditorProps) {
 function parseInitialContent(content: any): any {
   if (!content) return { type: 'doc', content: [{ type: 'paragraph' }] };
 
-  // Already TipTap JSON
+  // Already Tiptap JSON
   if (typeof content === 'object' && content.type === 'doc') {
     return content;
   }
 
-  // JSON string of TipTap doc
+  // JSON string of Tiptap doc
   if (typeof content === 'string') {
     try {
       const parsed = JSON.parse(content);
       if (parsed.type === 'doc') return parsed;
     } catch {
-      // Fallback: treat as raw markdown
+      // Fallback: treat as raw markdown → convert via HTML
     }
     // Legacy raw markdown content
-    return markdownToTiptap(content);
+    const html = markdownToHtml(content);
+    return html; // Tiptap can accept HTML strings
   }
 
   return { type: 'doc', content: [{ type: 'paragraph' }] };
@@ -167,13 +250,13 @@ function parseInitialContent(content: any): any {
 
 function looksLikeMarkdown(text: string): boolean {
   const mdPatterns = [
-    /^#{1,6}\s/m,    // headings
-    /^[-*]\s/m,      // bullets
-    /^\d+\.\s/m,     // numbered list
-    /^>\s/m,         // blockquote
-    /^```/m,         // code fence
-    /\*\*.+\*\*/,    // bold
-    /\*.+\*/,        // italic
+    /^#{1,6}\s/m,
+    /^[-*]\s/m,
+    /^\d+\.\s/m,
+    /^>\s/m,
+    /^```/m,
+    /\*\*.+\*\*/,
+    /\[.+\]\(.+\)/,
   ];
   let hits = 0;
   for (const p of mdPatterns) {
