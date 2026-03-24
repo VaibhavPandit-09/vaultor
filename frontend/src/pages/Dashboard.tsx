@@ -9,6 +9,8 @@ import type { Note } from '../types';
 import { useTheme } from '../lib/ThemeContext';
 import FileAttachments from '../components/FileAttachments';
 import BlockEditor from '../components/editor/BlockEditor';
+import { markdownToHtml } from '../components/editor/markdownUtils';
+import { csvToTableHtml } from '../components/editor/csvUtils';
 
 export default function Dashboard() {
   const [notes, setNotes] = useState<Note[]>([]);
@@ -18,6 +20,8 @@ export default function Dashboard() {
   
   const [search, setSearch] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
+  const mdUploadRef = useRef<HTMLInputElement>(null);
+  const csvUploadRef = useRef<HTMLInputElement>(null);
 
   // Security Modals
   const [authModal, setAuthModal] = useState<'export' | 'import' | null>(null);
@@ -116,6 +120,57 @@ export default function Dashboard() {
     }
   };
 
+  // === File Upload Handlers (owned by Dashboard, not BlockEditor) ===
+
+  const handleRequestMdUpload = useCallback(() => {
+    if (mdUploadRef.current) {
+      mdUploadRef.current.value = '';
+      mdUploadRef.current.click();
+    }
+  }, []);
+
+  const handleRequestCsvUpload = useCallback(() => {
+    if (csvUploadRef.current) {
+      csvUploadRef.current.value = '';
+      csvUploadRef.current.click();
+    }
+  }, []);
+
+  const handleMdFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const html = markdownToHtml(text);
+      const editor = (window as any).__vaultor_editor;
+      if (editor) {
+        editor.chain().focus().insertContent(html).run();
+      }
+    } catch (err) {
+      console.error('MD upload failed:', err);
+    }
+    // Reset so same file can be picked again
+    if (mdUploadRef.current) mdUploadRef.current.value = '';
+  }, []);
+
+  const handleCsvFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const html = csvToTableHtml(text);
+      const editor = (window as any).__vaultor_editor;
+      if (editor) {
+        editor.chain().focus().insertContent(html).run();
+      }
+    } catch (err) {
+      console.error('CSV upload failed:', err);
+    }
+    if (csvUploadRef.current) csvUploadRef.current.value = '';
+  }, []);
+
+  // === Export / Import ===
+
   const triggerExport = () => {
     setAuthModal('export');
     setAuthPassword('');
@@ -180,22 +235,21 @@ export default function Dashboard() {
     n.preview?.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Parse content for the editor
   const editorContent = activeNote?.content
     ? (() => {
-        try {
-          const parsed = JSON.parse(activeNote.content as string);
-          return parsed;
-        } catch {
-          return activeNote.content; // raw markdown fallback
-        }
+        try { return JSON.parse(activeNote.content as string); }
+        catch { return activeNote.content; }
       })()
     : null;
 
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden">
       
-      {/* Auth Modal for Export/Import */}
+      {/* Hidden file inputs at Dashboard level — always in DOM */}
+      <input type="file" ref={mdUploadRef} className="hidden" accept=".md,.markdown,.txt" onChange={handleMdFileChange} />
+      <input type="file" ref={csvUploadRef} className="hidden" accept=".csv,.tsv,.txt" onChange={handleCsvFileChange} />
+
+      {/* Auth Modal */}
       {authModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-card w-full max-w-sm p-6 rounded-2xl shadow-2xl border border-border">
@@ -331,6 +385,8 @@ export default function Dashboard() {
                   key={activeNote.id}
                   content={editorContent}
                   onUpdate={handleContentUpdate}
+                  onRequestMdUpload={handleRequestMdUpload}
+                  onRequestCsvUpload={handleRequestCsvUpload}
                 />
                 
                 <FileAttachments 
