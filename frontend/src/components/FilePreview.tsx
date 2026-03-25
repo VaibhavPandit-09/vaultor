@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Download, ExternalLink, FileText, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
@@ -80,90 +80,20 @@ function useAuthTextContent(resourceId: string) {
 
 interface FilePreviewProps {
   resource: Resource;
-  onAddTag: (name: string) => void;
-  onRemoveTag: (name: string) => void;
 }
 
-export default function FilePreview({ resource, onAddTag, onRemoveTag }: FilePreviewProps) {
+export default function FilePreview({ resource }: FilePreviewProps) {
   const tooLarge = (resource.size ?? 0) > MAX_PREVIEW_SIZE;
   const previewType = tooLarge ? 'fallback' : getPreviewType(resource.mimeType, resource.title);
 
-  const handleDownload = async () => {
-    try {
-      const res = await api.get(`/resources/${resource.id}/download`, { responseType: 'blob' });
-      const url = URL.createObjectURL(new Blob([res.data]));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = resource.title || 'download';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Download failed', e);
-    }
-  };
-
-  const handleOpenInTab = async () => {
-    try {
-      const res = await api.get(`/resources/${resource.id}/raw`, { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: resource.mimeType || 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-    } catch (e) {
-      console.error('Open failed', e);
-    }
-  };
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="min-h-16 border-b border-border flex flex-col justify-center px-8 py-3 bg-card flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold truncate flex items-center">
-            <FileText size={20} className="mr-2 text-primary flex-shrink-0" />
-            {resource.title}
-          </h2>
-          <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-            <button onClick={handleDownload} className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
-              <Download size={14} /> Download
-            </button>
-            <button onClick={handleOpenInTab} className="px-3 py-1.5 text-xs font-medium border border-border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1.5">
-              <ExternalLink size={14} /> Open
-            </button>
-          </div>
-        </div>
-
-        {/* Tags */}
-        <div className="flex items-center mt-2 flex-wrap gap-1">
-          {resource.tags?.map(t => (
-            <span key={t.id} className="text-[11px] font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2 py-0.5 rounded-md flex items-center">
-              {t.name}
-              <button onClick={() => onRemoveTag(t.name)} className="ml-1.5 opacity-50 hover:opacity-100 text-red-500 text-[10px]">✕</button>
-            </span>
-          ))}
-          <input
-            placeholder="Add tag..."
-            className="text-[11px] bg-transparent border-none outline-none text-slate-400 placeholder:text-slate-500 w-24 ml-1"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && e.currentTarget.value.trim()) {
-                onAddTag(e.currentTarget.value.trim());
-                e.currentTarget.value = '';
-              }
-            }}
-          />
-        </div>
-
-        {/* Metadata */}
-        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
-          {resource.mimeType && <span>{resource.mimeType}</span>}
-          {resource.size != null && <span>{formatSize(resource.size)}</span>}
-        </div>
-      </div>
-
-      {/* Preview Area */}
-      <div className="flex-1 overflow-auto p-6 bg-background">
+    <div className="flex h-full flex-col">
+      <div className="flex-1 overflow-auto bg-background p-6">
         <div className="max-w-4xl mx-auto">
+          <div className="mb-4 flex flex-wrap gap-3 text-[11px] text-slate-400">
+            {resource.mimeType && <span>{resource.mimeType}</span>}
+            {resource.size != null && <span>{formatSize(resource.size)}</span>}
+          </div>
           <PreviewResolver type={previewType} resource={resource} tooLarge={tooLarge} />
         </div>
       </div>
