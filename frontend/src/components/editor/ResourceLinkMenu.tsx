@@ -89,16 +89,14 @@ export default function ResourceLinkMenu({ editor, range, query, selectedIndex, 
         return;
       }
       try {
-        const { data } = await api.post('/resources/empty', { title: query.trim(), type });
+        const { data } = await api.post('/resources', {
+          type: 'note',
+          title: query.trim(),
+          content: { type: 'doc', content: [] },
+        });
         resourceId = data.id;
         label = data.title;
         type = data.type;
-        // Optional user requirement: immediately open the note
-        setTimeout(() => {
-           if ((window as any).__openResource) {
-             (window as any).__openResource(resourceId, type, label);
-           }
-        }, 100);
       } catch (e) {
         console.error('Failed to create resource inline', e);
         return;

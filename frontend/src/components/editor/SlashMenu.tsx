@@ -7,7 +7,7 @@ import {
   Minus, Table, FileSpreadsheet, CheckSquare,
   Highlighter, Link2
 } from 'lucide-react';
-import { resourceLinkPluginKey } from './ResourceLinkExtension';
+import { activateResourceLinkSuggestion } from './ResourceLinkExtension';
 
 interface SlashMenuItem {
   title: string;
@@ -152,14 +152,11 @@ const getItems = (onUploadMd: () => void, onUploadCsv: () => void): SlashMenuIte
     icon: <Link2 size={18} />,
     category: 'Insert',
     action: (editor, range) => {
-      // Deletes the `/link` text, inserts `[[`, and activates the plugin.
       editor.chain().focus().deleteRange(range).insertContent('[[').run();
       const { from } = editor.state.selection;
       setTimeout(() => {
-         const tr = editor.state.tr;
-         tr.setMeta(resourceLinkPluginKey, { active: true, query: '', range: { from: from - 2, to: from }, selectedIndex: 0 });
-         editor.view.dispatch(tr);
-      }, 50);
+        activateResourceLinkSuggestion(editor.view, { from: from - 2, to: from });
+      }, 0);
     },
   },
   // --- Upload ---

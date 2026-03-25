@@ -1,6 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import { ReactNodeViewRenderer } from '@tiptap/react';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
+import type { EditorView } from '@tiptap/pm/view';
 import ResourceLinkView from './ResourceLinkView';
 
 export interface ResourceLinkState {
@@ -18,6 +19,16 @@ const INITIAL_STATE: ResourceLinkState = {
 };
 
 export const resourceLinkPluginKey = new PluginKey('resourceLinkSuggest');
+
+export function activateResourceLinkSuggestion(
+  view: EditorView,
+  range: { from: number; to: number },
+  query = '',
+) {
+  const tr = view.state.tr;
+  tr.setMeta(resourceLinkPluginKey, { active: true, query, range, selectedIndex: 0 });
+  view.dispatch(tr);
+}
 
 export const ResourceLinkExtension = Node.create({
   name: 'resourceLink',
@@ -98,9 +109,7 @@ export const ResourceLinkExtension = Node.create({
               
               if (textBefore.endsWith('[')) {
                 setTimeout(() => {
-                  const tr = view.state.tr;
-                  tr.setMeta(resourceLinkPluginKey, { active: true, query: '', range: { from: from - 1, to: from + 1 }, selectedIndex: 0 });
-                  view.dispatch(tr);
+                  activateResourceLinkSuggestion(view, { from: from - 1, to: from + 1 });
                 }, 0);
               }
               return false;

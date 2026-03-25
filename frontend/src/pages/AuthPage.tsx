@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { Lock, Unlock, UploadCloud } from 'lucide-react';
+import AppModal from '../components/modals/AppModal';
 
 export default function AuthPage() {
   const [isSetup, setIsSetup] = useState<boolean | null>(null);
@@ -12,6 +13,7 @@ export default function AuthPage() {
   const [isRestoring, setIsRestoring] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [restoreSuccessOpen, setRestoreSuccessOpen] = useState(false);
 
   useEffect(() => {
     api.get('/auth/status')
@@ -44,7 +46,7 @@ export default function AuthPage() {
           formData.append('file', importFile);
           formData.append('password', password);
           await api.post('/import', formData);
-          alert('Vault restored successfully! The server is restarting to load your data. Click OK to refresh.');
+          setRestoreSuccessOpen(true);
           setTimeout(() => window.location.reload(), 2000);
           return;
         }
@@ -76,6 +78,24 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background text-foreground transition-colors duration-200">
+      <AppModal
+        open={restoreSuccessOpen}
+        onClose={() => setRestoreSuccessOpen(false)}
+        title="Vault Restored"
+        description="Your encrypted vault was restored successfully. The app will refresh in a moment."
+        footer={
+          <button
+            onClick={() => window.location.reload()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            Refresh Now
+          </button>
+        }
+      >
+        <p className="text-sm text-slate-500">
+          Vaultor is restarting the backend so your restored data can be loaded safely.
+        </p>
+      </AppModal>
       <div className="max-w-md w-full p-8 bg-card rounded-2xl shadow-xl border border-border">
         <div className="flex justify-center mb-8">
           <div className="p-4 bg-primary/10 rounded-full text-primary shadow-inner">

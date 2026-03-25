@@ -86,6 +86,14 @@ public class ResourceController {
         return resourceService.createNote(payload.get("title"), payload.get("content"));
     }
 
+    @PostMapping
+    public Resource createResource(@RequestBody Map<String, Object> payload) {
+        String type = String.valueOf(payload.getOrDefault("type", "note"));
+        String title = String.valueOf(payload.getOrDefault("title", "Untitled"));
+        String content = payload.get("content") == null ? null : String.valueOf(payload.get("content"));
+        return resourceService.createResource(type, title, content);
+    }
+
     @PutMapping("/{id}/note")
     public Resource updateNote(@PathVariable String id, @RequestBody Map<String, String> payload) {
         return resourceService.updateNote(id, payload.get("title"), payload.get("content"));
@@ -167,13 +175,10 @@ public class ResourceController {
         if (newId == null || newId.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
-        // Verify new resource exists
         if (!resourceRepository.existsById(newId)) {
             return ResponseEntity.badRequest().build();
         }
-        relationshipRepository.replaceToId(id, newId, "link");
-        // Now delete the old resource
-        resourceService.deleteResource(id);
+        resourceService.replaceLinksAndDelete(id, newId);
         return ResponseEntity.ok().build();
     }
 

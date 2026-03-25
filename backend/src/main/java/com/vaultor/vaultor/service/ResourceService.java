@@ -4,6 +4,7 @@ import com.vaultor.vaultor.model.Resource;
 import com.vaultor.vaultor.repository.ResourceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -46,6 +47,13 @@ public class ResourceService {
         return resourceRepository.save(r);
     }
 
+    public Resource createResource(String type, String title, String content) {
+        if ("note".equals(type)) {
+            return createNote(title, content);
+        }
+        throw new IllegalArgumentException("Unsupported resource type: " + type);
+    }
+
     public void deleteResource(String id) {
         resourceRepository.findById(id).ifPresent(r -> {
             if ("file".equals(r.getType()) && r.getFilePath() != null) {
@@ -56,6 +64,15 @@ public class ResourceService {
             relationshipService.deleteRelationshipsFor(id);
             resourceRepository.delete(r);
         });
+    }
+
+    @Transactional
+    public void replaceLinksAndDelete(String oldId, String newId) {
+        if (!resourceRepository.existsById(newId)) {
+            throw new IllegalArgumentException("Replacement resource not found");
+        }
+        relationshipService.replaceLinks(oldId, newId);
+        deleteResource(oldId);
     }
 
     public Resource getResourceOrThrow(String id) {

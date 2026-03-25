@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.11.2",
     "@tiptap/extension-blockquote": "^3.20.4",
     "@tiptap/extension-bold": "^3.20.4",
     "@tiptap/extension-bullet-list": "^3.20.4",
@@ -53,6 +54,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
+    "react-redux": "^9.2.0",
     "react-router-dom": "^7.13.2",
     "react-syntax-highlighter": "^16.1.1",
     "remark-gfm": "^4.0.1",

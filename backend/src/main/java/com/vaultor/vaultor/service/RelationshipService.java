@@ -30,4 +30,9 @@ public class RelationshipService {
             relationshipRepository.save(new Relationship(noteId, targetId, "link"));
         }
     }
+
+    @Transactional
+    public void replaceLinks(String oldId, String newId) {
+        relationshipRepository.replaceToId(oldId, newId, "link");
+    }
 }
