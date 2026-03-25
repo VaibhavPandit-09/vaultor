@@ -19,7 +19,6 @@ import {
   AlertTriangle,
   Loader2,
   Command,
-  Keyboard,
 } from 'lucide-react';
 import api from '../lib/api';
 import type { Resource, Tag } from '../types';
@@ -40,7 +39,6 @@ import {
   removeResourceFromState,
   removeSelectedTag,
   setCurrentResourceId,
-  setSearchQuery,
   setTypeFilter,
   toggleSelectedTag,
 } from '../state/store';
@@ -211,18 +209,6 @@ export default function Dashboard() {
         return;
       }
 
-      if (modKey && event.key.toLowerCase() === 'n') {
-        event.preventDefault();
-        handleCreateNote();
-        return;
-      }
-
-      if (modKey && event.key.toLowerCase() === 'u') {
-        event.preventDefault();
-        if (!uploadPending) fileUploadRef.current?.click();
-        return;
-      }
-
       if ((modKey && event.key === '/') || (!isEditable && event.key === '?')) {
         event.preventDefault();
         setShortcutsOpen(true);
@@ -240,22 +226,11 @@ export default function Dashboard() {
         handleForwardNavigation();
         return;
       }
-
-      if (!isMac && event.altKey && event.key === 'ArrowLeft') {
-        event.preventDefault();
-        handleBackNavigation();
-        return;
-      }
-
-      if (!isMac && event.altKey && event.key === 'ArrowRight') {
-        event.preventDefault();
-        handleForwardNavigation();
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleBackNavigation, handleCreateNote, handleForwardNavigation, uploadPending]);
+  }, [handleBackNavigation, handleForwardNavigation]);
 
   useEffect(() => {
     if (!replaceLinkModal || !replaceSearch.trim()) {
@@ -521,12 +496,11 @@ export default function Dashboard() {
 
   const filteredResources = useMemo(() => {
     return resources.filter((resource) => {
-      const matchesSearch = resource.title.toLowerCase().includes(filters.searchQuery.toLowerCase());
       const matchesType = filters.typeFilter === 'all' || resource.type === filters.typeFilter;
       const matchesTags = filters.selectedTags.length === 0 || filters.selectedTags.every((tagName) => resource.tags?.some((tag) => tag.name.toLowerCase() === tagName.toLowerCase()));
-      return matchesSearch && matchesType && matchesTags;
+      return matchesType && matchesTags;
     });
-  }, [filters.searchQuery, filters.selectedTags, filters.typeFilter, resources]);
+  }, [filters.selectedTags, filters.typeFilter, resources]);
 
   const noteCount = filteredResources.filter((resource) => resource.type === 'note').length;
   const fileCount = filteredResources.filter((resource) => resource.type === 'file').length;
@@ -778,52 +752,33 @@ export default function Dashboard() {
           <h1 className="flex items-center text-lg font-bold tracking-tight text-primary">
             <Database className="mr-2" size={22} /> Vaultor
           </h1>
-          <button
-            onClick={() => setGlobalSearchOpen(true)}
-            className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-[11px] font-medium text-slate-500 transition-colors hover:border-primary hover:text-primary"
-            title={isMac ? 'Search (Cmd+K)' : 'Search (Ctrl+K)'}
-          >
-            <Search size={12} />
-            <span>{isMac ? 'Cmd' : 'Ctrl'}+K</span>
-          </button>
         </div>
 
         <div className="px-3 pb-2">
-          <div className="flex gap-1.5">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full rounded-lg border border-border bg-background py-1.5 pl-8 pr-3 text-xs transition-colors focus:border-primary focus:outline-none"
-                value={filters.searchQuery}
-                onChange={(event) => dispatch(setSearchQuery(event.target.value))}
-              />
-            </div>
-            <div className="relative">
-              <button
-                onClick={() => setShowTypeDropdown((prev) => !prev)}
-                className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
-              >
-                {typeLabels[filters.typeFilter]} <ChevronDown size={12} />
-              </button>
-              {showTypeDropdown && (
-                <div className="absolute right-0 z-20 mt-1 w-24 rounded-lg border border-border bg-card py-1 shadow-xl">
-                  {(['all', 'note', 'file'] as TypeFilter[]).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => {
-                        dispatch(setTypeFilter(type));
-                        setShowTypeDropdown(false);
-                      }}
-                      className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${filters.typeFilter === type ? 'font-semibold text-primary' : ''}`}
-                    >
-                      {typeLabels[type]}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          <div className="relative">
+            <button
+              onClick={() => setShowTypeDropdown((prev) => !prev)}
+              className="flex w-full items-center justify-between gap-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs font-medium transition-colors hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <span>Type: {typeLabels[filters.typeFilter]}</span>
+              <ChevronDown size={12} />
+            </button>
+            {showTypeDropdown && (
+              <div className="absolute right-0 z-20 mt-1 w-full rounded-lg border border-border bg-card py-1 shadow-xl">
+                {(['all', 'note', 'file'] as TypeFilter[]).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      dispatch(setTypeFilter(type));
+                      setShowTypeDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left text-xs transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 ${filters.typeFilter === type ? 'font-semibold text-primary' : ''}`}
+                  >
+                    {typeLabels[type]}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -862,7 +817,7 @@ export default function Dashboard() {
 
         <div className="px-4 py-1.5 text-[10px] font-medium text-slate-400">
           {filteredResources.length} resource{filteredResources.length === 1 ? '' : 's'}
-          {(filters.searchQuery || filters.selectedTags.length > 0 || filters.typeFilter !== 'all') && (
+          {(filters.selectedTags.length > 0 || filters.typeFilter !== 'all') && (
             <span className="ml-1 opacity-70">({noteCount} note{noteCount === 1 ? '' : 's'}, {fileCount} file{fileCount === 1 ? '' : 's'})</span>
           )}
         </div>
@@ -953,7 +908,6 @@ export default function Dashboard() {
           <div className="flex items-center gap-0.5">
             <button onClick={triggerExport} title="Export Vault" className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-card hover:text-primary"><DownloadCloud size={16} /></button>
             <button onClick={() => importInputRef.current?.click()} title="Import Vault" className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-card hover:text-primary"><UploadCloud size={16} /></button>
-            <button onClick={() => setShortcutsOpen(true)} title="Keyboard Shortcuts" className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-card hover:text-primary"><Keyboard size={16} /></button>
           </div>
           <div className="flex items-center gap-0.5">
             <button onClick={toggleTheme} className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-card hover:text-primary">
@@ -988,11 +942,8 @@ export default function Dashboard() {
             <div className="truncate text-sm font-medium text-slate-500">{activeResource?.title || 'No resource selected'}</div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setGlobalSearchOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:border-primary hover:text-primary">
-              <Search size={14} /> Search
-            </button>
             <button onClick={() => setShortcutsOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:border-primary hover:text-primary">
-              <Command size={14} /> Help
+              <Command size={14} /> {isMac ? '⌘' : 'Ctrl'} Help
             </button>
           </div>
         </div>

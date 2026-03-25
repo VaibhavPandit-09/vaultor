@@ -17,10 +17,12 @@ export const shortcuts: ShortcutCategory[] = [
     category: 'Navigation',
     items: [
       { description: 'Search resources', keys: [modKey, 'K'] },
-      { description: 'Go back', keys: isMac ? ['Cmd', '['] : ['Alt', 'Left'] },
-      { description: 'Go forward', keys: isMac ? ['Cmd', ']'] : ['Alt', 'Right'] },
-      { description: 'New note', keys: [modKey, 'N'] },
-      { description: 'Upload file', keys: [modKey, 'U'] },
+      ...(isMac
+        ? [
+            { description: 'Go back', keys: ['Cmd', '['] },
+            { description: 'Go forward', keys: ['Cmd', ']'] },
+          ]
+        : []),
       { description: 'Open shortcuts', keys: [modKey, '/'] },
     ],
   },

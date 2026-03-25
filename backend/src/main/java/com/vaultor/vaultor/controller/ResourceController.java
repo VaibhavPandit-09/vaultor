@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -31,6 +32,7 @@ public class ResourceController {
     private final RelationshipRepository relationshipRepository;
     private final TagService tagService;
     private final FileStorageService fileStorageService;
+    private final ObjectMapper objectMapper;
 
     // ─── List & Search ───────────────────────────────────────
 
@@ -90,7 +92,16 @@ public class ResourceController {
     public Resource createResource(@RequestBody Map<String, Object> payload) {
         String type = String.valueOf(payload.getOrDefault("type", "note"));
         String title = String.valueOf(payload.getOrDefault("title", "Untitled"));
-        String content = payload.get("content") == null ? null : String.valueOf(payload.get("content"));
+        String content = null;
+        if (payload.get("content") != null) {
+            try {
+                content = payload.get("content") instanceof String
+                        ? (String) payload.get("content")
+                        : objectMapper.writeValueAsString(payload.get("content"));
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid content payload", e);
+            }
+        }
         return resourceService.createResource(type, title, content);
     }
 
