@@ -40,6 +40,9 @@ public class Resource {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "last_opened_at")
+    private LocalDateTime lastOpenedAt;
+
     @ManyToMany
     @JoinTable(
         name = "resource_tags",
@@ -52,10 +55,23 @@ public class Resource {
     public void prePersist() {
         if (createdAt == null) createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (lastOpenedAt == null) lastOpenedAt = LocalDateTime.now();
+        validateIntegrity();
     }
 
     @PreUpdate
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
+        validateIntegrity();
+    }
+
+    private void validateIntegrity() {
+        if ("note".equals(type)) {
+            if (content == null) content = "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}";
+            filePath = null;
+        } else if ("file".equals(type)) {
+            if (filePath == null) throw new IllegalStateException("File resources must have a file_path");
+            content = null;
+        }
     }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Editor } from '@tiptap/react';
 import { FileText, File, Search } from 'lucide-react';
 import api from '../../lib/api';
@@ -15,6 +15,7 @@ interface ResourceLinkMenuProps {
 export default function ResourceLinkMenu({ editor, range, query, selectedIndex, onClose, onUpdateFiltered }: ResourceLinkMenuProps) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -28,7 +29,7 @@ export default function ResourceLinkMenu({ editor, range, query, selectedIndex, 
           
           if (!hasExact && query.trim().length > 0) {
             fetchedItems.push({ id: 'create-note', type: 'note', title: `Create Note "${query}"`, virtual: true });
-            fetchedItems.push({ id: 'create-file', type: 'file', title: `Create File "${query}"`, virtual: true });
+            fetchedItems.push({ id: 'create-file', type: 'file', title: `Upload File`, virtual: true });
           }
           
           setItems(fetchedItems);
@@ -48,6 +49,32 @@ export default function ResourceLinkMenu({ editor, range, query, selectedIndex, 
     };
   }, [query, onUpdateFiltered]);
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      onClose();
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const { data } = await api.post('/resources/file', formData);
+      if (editor) {
+        editor.chain().focus()
+          .deleteRange(range)
+          .insertContent({
+            type: 'resourceLink',
+            attrs: { resourceId: data.id, label: data.title, type: data.type }
+          })
+          .insertContent(' ')
+          .run();
+        onClose();
+      }
+    } catch (err) {
+      console.error('File upload failed', err);
+    }
+  };
+
   const selectItem = useCallback(async (index: number) => {
     const item = items[index];
     if (!item) return;
@@ -57,11 +84,21 @@ export default function ResourceLinkMenu({ editor, range, query, selectedIndex, 
     let type = item.type;
 
     if (item.virtual) {
+      if (type === 'file') {
+        fileInputRef.current?.click();
+        return;
+      }
       try {
         const { data } = await api.post('/resources/empty', { title: query.trim(), type });
         resourceId = data.id;
         label = data.title;
         type = data.type;
+        // Optional user requirement: immediately open the note
+        setTimeout(() => {
+           if ((window as any).__openResource) {
+             (window as any).__openResource(resourceId, type, label);
+           }
+        }, 100);
       } catch (e) {
         console.error('Failed to create resource inline', e);
         return;
@@ -89,6 +126,7 @@ export default function ResourceLinkMenu({ editor, range, query, selectedIndex, 
 
   return (
     <div className="w-64 bg-slate-900 border border-slate-700/50 rounded-xl shadow-2xl py-2 flex flex-col max-h-80 overflow-y-auto z-50 animate-in fade-in zoom-in-95 duration-100 tippy-box">
+      <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
       <div className="px-3 py-1.5 mb-1 flex justify-between items-center text-xs font-semibold text-slate-400 border-b border-slate-700/50">
         <span className="flex items-center"><Search size={12} className="mr-1.5" /> Link Resource</span>
         {loading && <span className="animate-pulse">Searching...</span>}

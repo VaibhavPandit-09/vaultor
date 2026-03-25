@@ -1,8 +1,9 @@
 package com.vaultor.vaultor.controller;
 
 import com.vaultor.vaultor.model.Resource;
-import com.vaultor.vaultor.model.Tag;
+import com.vaultor.vaultor.model.Relationship;
 import com.vaultor.vaultor.repository.ResourceRepository;
+import com.vaultor.vaultor.repository.RelationshipRepository;
 import com.vaultor.vaultor.service.FileStorageService;
 import com.vaultor.vaultor.service.ResourceService;
 import com.vaultor.vaultor.service.TagService;
@@ -16,9 +17,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -28,12 +28,15 @@ public class ResourceController {
 
     private final ResourceService resourceService;
     private final ResourceRepository resourceRepository;
+    private final RelationshipRepository relationshipRepository;
     private final TagService tagService;
     private final FileStorageService fileStorageService;
 
+    // ─── List & Search ───────────────────────────────────────
+
     @GetMapping
     public List<Resource> getAllResources(@RequestParam(value = "tag", required = false) String tagFilter) {
-        List<Resource> all = resourceRepository.findAllByOrderByUpdatedAtDesc();
+        List<Resource> all = resourceRepository.findAllByOrderByLastOpenedAtDescUpdatedAtDesc();
         if (tagFilter != null && !tagFilter.isBlank()) {
             return all.stream()
                .filter(r -> r.getTags().stream().anyMatch(t -> t.getName().equalsIgnoreCase(tagFilter)))
@@ -45,10 +48,8 @@ public class ResourceController {
     @GetMapping("/search")
     public List<Resource> searchResources(@RequestParam("q") String query) {
         if (query == null || query.trim().isEmpty()) {
-            return resourceRepository.findAllByOrderByUpdatedAtDesc();
+            return resourceRepository.findAllByOrderByLastOpenedAtDescUpdatedAtDesc();
         }
-        // Since sqlite doesn't trivially rank, we just do a simplistic search sort.
-        // Exact matches first, then contains logic handled on frontend or just basic here.
         List<Resource> results = resourceRepository.findByTitleContainingIgnoreCase(query);
         results.sort((a, b) -> {
             boolean aExact = a.getTitle().equalsIgnoreCase(query);
@@ -67,6 +68,19 @@ public class ResourceController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // ─── Open Tracking ──────────────────────────────────────
+
+    @PostMapping("/{id}/open")
+    public ResponseEntity<Void> markOpened(@PathVariable String id) {
+        resourceRepository.findById(id).ifPresent(r -> {
+            r.setLastOpenedAt(LocalDateTime.now());
+            resourceRepository.save(r);
+        });
+        return ResponseEntity.ok().build();
+    }
+
+    // ─── CRUD ────────────────────────────────────────────────
+
     @PostMapping("/note")
     public Resource createNote(@RequestBody Map<String, String> payload) {
         return resourceService.createNote(payload.get("title"), payload.get("content"));
@@ -81,11 +95,10 @@ public class ResourceController {
     public Resource createEmptyResource(@RequestBody Map<String, String> payload) {
         String type = payload.getOrDefault("type", "note");
         String title = payload.getOrDefault("title", "Untitled");
-        if ("note".equals(type)) {
-            return resourceService.createNote(title, "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}");
-        } else {
-            return resourceService.createEmptyFile(title);
+        if (!"note".equals(type)) {
+            throw new IllegalArgumentException("Cannot create empty resource of type " + type);
         }
+        return resourceService.createNote(title, "{\"type\":\"doc\",\"content\":[{\"type\":\"paragraph\"}]}");
     }
 
     @PostMapping("/file")
@@ -96,6 +109,14 @@ public class ResourceController {
             return ResponseEntity.internalServerError().body(e.getMessage());
         }
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteResource(@PathVariable String id) {
+        resourceService.deleteResource(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ─── File Serving ────────────────────────────────────────
 
     @GetMapping("/{id}/download")
     public ResponseEntity<org.springframework.core.io.Resource> downloadFile(@PathVariable String id) {
@@ -114,11 +135,49 @@ public class ResourceController {
         }).orElse(ResponseEntity.notFound().build());
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteResource(@PathVariable String id) {
-        resourceService.deleteResource(id);
-        return ResponseEntity.noContent().build();
+    @GetMapping("/{id}/raw")
+    public ResponseEntity<org.springframework.core.io.Resource> rawFile(@PathVariable String id) {
+        return resourceRepository.findById(id).map(f -> {
+            if (!"file".equals(f.getType())) return ResponseEntity.badRequest().<org.springframework.core.io.Resource>build();
+            try {
+                Path path = fileStorageService.getFile(f.getFilePath());
+                org.springframework.core.io.Resource resource = new UrlResource(path.toUri());
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(f.getMimeType() != null ? f.getMimeType() : "application/octet-stream"))
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + f.getTitle() + "\"")
+                        .body(resource);
+            } catch (Exception e) {
+                return ResponseEntity.internalServerError().<org.springframework.core.io.Resource>build();
+            }
+        }).orElse(ResponseEntity.notFound().build());
     }
+
+    // ─── Backlinks & Replace ─────────────────────────────────
+
+    @GetMapping("/{id}/backlinks")
+    public List<Resource> getBacklinks(@PathVariable String id) {
+        List<Relationship> relationships = relationshipRepository.findByToIdAndType(id, "link");
+        List<String> callerIds = relationships.stream().map(Relationship::getFromId).collect(Collectors.toList());
+        return resourceRepository.findAllById(callerIds);
+    }
+
+    @PostMapping("/{id}/replace-links")
+    public ResponseEntity<Void> replaceLinks(@PathVariable String id, @RequestBody Map<String, String> payload) {
+        String newId = payload.get("newResourceId");
+        if (newId == null || newId.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        // Verify new resource exists
+        if (!resourceRepository.existsById(newId)) {
+            return ResponseEntity.badRequest().build();
+        }
+        relationshipRepository.replaceToId(id, newId, "link");
+        // Now delete the old resource
+        resourceService.deleteResource(id);
+        return ResponseEntity.ok().build();
+    }
+
+    // ─── Tags ────────────────────────────────────────────────
 
     @PostMapping("/{id}/tags/{tagName}")
     public ResponseEntity<Void> addTag(@PathVariable String id, @PathVariable String tagName) {

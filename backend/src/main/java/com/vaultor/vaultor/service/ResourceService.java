@@ -35,13 +35,6 @@ public class ResourceService {
         }).orElseThrow(() -> new RuntimeException("Note not found"));
     }
 
-    public Resource createEmptyFile(String title) {
-        Resource r = new Resource();
-        r.setType("file");
-        r.setTitle(title != null ? title : "Untitled File");
-        return resourceRepository.save(r);
-    }
-
     public Resource uploadFile(MultipartFile file) throws IOException {
         String storedName = fileStorageService.storeFile(file);
         Resource r = new Resource();

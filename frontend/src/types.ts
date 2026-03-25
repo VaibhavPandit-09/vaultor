@@ -13,6 +13,7 @@ export interface Resource {
   size?: number | null;
   createdAt: string;
   updatedAt: string;
+  lastOpenedAt?: string | null;
   tags: Tag[];
 }
 

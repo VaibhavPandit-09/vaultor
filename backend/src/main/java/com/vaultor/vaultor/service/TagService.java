@@ -6,6 +6,7 @@ import com.vaultor.vaultor.repository.ResourceRepository;
 import com.vaultor.vaultor.repository.TagRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -38,5 +39,19 @@ public class TagService {
 
     public List<Tag> getAllTags() {
         return tagRepository.findAll();
+    }
+
+    @Transactional
+    public void deleteTag(String tagId) {
+        tagRepository.findById(tagId).ifPresent(tag -> {
+            // Remove this tag from all resources that have it
+            List<Resource> allResources = resourceRepository.findAll();
+            for (Resource r : allResources) {
+                if (r.getTags().remove(tag)) {
+                    resourceRepository.save(r);
+                }
+            }
+            tagRepository.delete(tag);
+        });
     }
 }
